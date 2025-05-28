@@ -1,0 +1,42 @@
+#modified mask_background from motion.py so that can take bgs background subtractor instances
+def mask_background(video: np.ndarray, background_subtractor) -> np.ndarray:
+    """Generates, by background subtraction, a video of foreground masks
+
+    Parameters
+    ----------
+    * video - a collection of frames
+    * background_subtractor - a mask generating function to apply to each frame
+
+    Returns
+    -------
+
+    A collection of frames representing foreground objects in each frame
+    """
+
+    if isinstance(background_subtractor, cv2.BackgroundSubtractor):
+        print("using cv background subtractor...")
+        f = background_subtractor.apply
+    elif isinstance(background_subtractor, bgs.SuBSENSE):
+        print("using bgs SuBENSE background subtractor")
+        f = background_subtractor.apply
+    elif isinstance(background_subtractor, bgs.PixelBasedAdaptiveSegmenter):
+        print(" PixelBasedAdaptiveSegmenter")
+        f = background_subtractor.apply
+    elif isinstance(background_subtractor, bgs.LOBSTER):
+        print("LOBSTER")
+        f = background_subtractor.apply
+    else:
+        #Also tried ViBe algorithm but couldn't find name
+        print("couldn't find name of bgs background subtractor class")
+        f = background_subtractor.apply
+
+    if len(video.shape) == 3:
+        return np.array([f(video)])
+    else:
+        return np.array([f(v) for v in video])
+
+#instantiate background_subtractor instance here
+#name of class sometimes hard to find
+#find in this GitHub: https://github.com/andrewssobral/bgslibrary/tree/master/bgslibrary/algorithms
+background_subtractor = bgs.PixelBasedAdaptiveSegmenter()
+masks = mask_background(breathecam_video[1:], background_subtractor)
