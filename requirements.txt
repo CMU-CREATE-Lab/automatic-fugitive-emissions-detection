@@ -1,0 +1,15 @@
+beautifulsoup4>=4.9.0
+ffmpeg-python
+flask>=2.0.0
+flask_socketio
+jupyter
+matplotlib
+opencv-python
+opencv-contrib-python
+plotly
+psycopg2-binary>=2.8.5
+requests
+scikit-image
+scipy
+SQLAlchemy>=1.4.0
+tqdm

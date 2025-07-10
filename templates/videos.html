@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/keyboard-navigation.css') }}">
+    <style>
+      img {height:300px}
+      body {margin:0px}
+      #site-title {
+        margin-bottom: 5px;
+        text-align: center;
+        width: 100%;
+      }
+      .label {
+        font-size: 9px;
+      }
+      .video-container {
+        display: inline-flex;
+        flex-flow: column nowrap;
+        margin: 3px;
+        padding-bottom: 20px;
+      }
+      .checkbox-group {
+        width: fit-content;
+        margin-top: 5px;
+        display: flex;
+        flex-direction: column;
+      }
+      .checkbox-item {
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+      }
+      .checkbox-item input[type="checkbox"] {
+        margin-right: 5px;
+      }
+      #filter-controls {
+        border: 1px solid #ccc;
+        padding: 10px 15px;
+        width: fit-content;
+        border-radius: 5px;
+        margin-bottom: 30px;
+      }
+      #filter-controls legend {
+        font-weight: bold;
+        padding: 0 10px;
+        font-size: 14px;
+        color: #333;
+      }
+      #filter-controls label {
+       margin-right: 10px;
+      }
+      
+      /* Add keyboard shortcuts info box */
+      .keyboard-shortcuts {
+        position: fixed;
+        bottom: 10px;
+        right: 10px;
+        background: #f8f8f8;
+        border: 1px solid #ddd;
+        padding: 8px 12px;
+        border-radius: 5px;
+        font-size: 12px;
+        opacity: 0.8;
+      }
+      .keyboard-shortcuts ul {
+        margin: 5px 0;
+        padding-left: 20px;
+      }
+    </style>
+</head>
+
+<body>
+  <h1 id="site-title">{{ run_name }}</h1>
+
+  <fieldset id="filter-controls">
+    <legend>Filter Videos</legend>
+
+    {% for classification in classification_options %}
+      <label><input type="checkbox" class="filter" value="{{classification}}"> {{classification}}</label>
+    {% endfor %}
+
+    <button id="reset-filters">Reset Filters</button>
+  </fieldset>
+
+  {% for video in videos %}
+  <div class="video-container">
+    <video src="{{ video.src }}" loop muted controls playbackRate=0.5></video>
+    <div class="label">{{ video.label_text }}</div>
+    <div class="checkbox-group" data-group="{{video.record_id}}">
+      {% for classification, value in video.classifications.items() %}
+        <div class="checkbox-item">
+          <input type="checkbox" {% if value == true %}checked{% endif %} id="{{video.record_id}}_{{classification}}" name="{{video.record_id}}" value={{classification}}>
+          <label for="{{video.record_id}}_{{classification}}">{{ classification }}</label>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+  
+  <div class="keyboard-shortcuts">
+    <strong>Keyboard Shortcuts:</strong>
+    <ul>
+      <li>Tab/Shift+Tab: Next/prev unchecked video</li>
+      <li>Left/Right: Navigate between videos</li>
+      <li>M: Toggle smoke</li>
+      <li>T: Toggle steam</li>
+      <li>H: Toggle shadow</li>
+      <li>O: Toggle other_motion</li>
+      <li>N: Toggle none</li>
+    </ul>
+  </div>
+
+  <script>
+      // TODO: change URL for production
+      const socket = io.connect('http://127.0.0.1:5000');
+
+      var ggg;
+      function fixupVideo(v) {
+        //console.log(v);
+        var d = v.wrap('<div/>');
+        //console.log(d);
+        if (v.attr('playbackRate')) {
+          v[0].playbackRate = parseFloat($(v).attr('playbackRate'));
+        }
+        if (v.attr('trimRight')) {
+          vvv = v;
+          ddd = d;
+        }
+      }
+
+      function init() {
+        //console.log('init');
+        let observer = new IntersectionObserver(
+          (entries, observer) => {
+            for (entry of entries) {
+              if (entry.isIntersecting) {
+                //console.log('play', entry.target);
+                entry.target.play();
+              } else  {
+                //console.log('pause', entry.target);
+                entry.target.pause(); 
+              }
+            }
+          },
+          {threshold: 0}
+        );
+        
+        $('img,video').each(function(i,v){
+          fixupVideo($(v));
+          //console.log('setting up', v);
+          observer.observe(v);
+        });
+
+        socket.on('checkbox-update', (data) => {
+            var group = $('.checkbox-group[data-group="' + data.id + '"]');
+            group.find("input").each(function() {
+              $(this).prop('checked', data.classifications[$(this).val()]);
+            });
+        });
+
+        $(document).on('change', 'input[type="checkbox"]', function() {
+          var group = $(this).closest('.checkbox-group').data('group');
+          var checkboxesInGroup = $('input[name="'+$(this).attr('name')+'"]');
+          var checkedValues = {};
+
+          checkboxesInGroup.each(function() {
+            checkedValues[$(this).val()] = $(this).prop('checked');
+          });
+
+          socket.emit('update-video-classifications', { id: group, classifications: checkedValues });
+        });
+
+        function loadFiltersFromURL() {
+          let urlParams = new URLSearchParams(window.location.search);
+          let filters = urlParams.get("filters");
+
+          if (filters) {
+            let filterArray = filters.split(",");
+            $(".filter").each(function () {
+              $(this).prop("checked", filterArray.includes($(this).val()));
+            });
+          }
+
+          filterVideos();
+        }
+
+        function updateURLFilters() {
+          let selectedFilters = $(".filter:checked").map(function () {
+            return $(this).val();
+          }).get();
+
+          let newURL = window.location.pathname;
+          if (selectedFilters.length > 0) {
+            newURL += "?filters=" + selectedFilters.join(",");
+          }
+
+          history.replaceState(null, "", newURL);
+        }
+
+        function filterVideos() {
+          let selectedFilters = $(".filter:checked").map(function () {
+            return $(this).val();
+          }).get();
+
+          $(".video-container").each(function () {
+            let checkedValues = $(this).find('.checkbox-group input[type="checkbox"]:checked').map(function () {
+              return $(this).val();
+            }).get();
+
+            if (selectedFilters.length === 0) {
+              $(this).show();
+              return;
+            }
+
+            // Show if at least one checked checkbox matches a selected filter
+            let match = selectedFilters.some(filter => checkedValues.includes(filter));
+            $(this).toggle(match);
+          });
+        }
+
+        $(".filter").on("change", function () {
+          updateURLFilters();
+          filterVideos();
+        });
+
+        $("#reset-filters").click(function () {
+          $(".filter").prop("checked", false);
+          updateURLFilters();
+          filterVideos();
+        });
+
+        loadFiltersFromURL(); // Apply filters from URL on page load
+
+        // Additional code to ensure the first video gets focused
+        setTimeout(function() {
+          // Check if any video is already focused
+          if ($('.video-container.focused').length === 0) {
+            // If not, trigger focus on the first video
+            if ($('.video-container').length > 0) {
+              $('.video-container').first().trigger('click');
+            }
+          }
+        }, 100);
+      }
+
+      $(init);
+  </script>
+  <script src="{{ url_for('static', filename='js/keyboard-navigation.js') }}"></script>
+</body>
+</html>
