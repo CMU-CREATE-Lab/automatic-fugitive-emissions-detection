@@ -1,0 +1,15 @@
+def export_single_frames(sample_idxs : np.ndarray, #should be integers
+                         camera : BreatheCam,
+                         out_dir : str,
+                         time_fmt: str = "%Y-%m-%d_%H-%M-%S"):
+    # make sure the directory exists
+    os.makedirs(out_dir, exist_ok=True)
+
+    for batch_frame_idx, camera_frame_idx in tqdm(enumerate(sample_idxs)):
+        frame = camera.download_video(camera_frame_idx, 1)[0] #single frame video, so remove outer dim
+        capture_time_str = camera.capture_times[camera_frame_idx]
+        capture_time_dt = datetime.datetime.fromisoformat(capture_time_str)
+
+        #pad idx with zeros to fill up to digit length of max index
+        fname   = f"frame_{batch_frame_idx:04}_datetime_{capture_time_dt.strftime(time_fmt)}.png"
+        Image.fromarray(frame).save(os.path.join(out_dir, fname))
